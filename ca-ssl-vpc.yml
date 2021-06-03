@@ -1,0 +1,60 @@
+# VPC, Subnets, Route Tables & Security Groups
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  VPC: { Type: 'AWS::EC2::VPC', Properties: { CidrBlock: 10.0.0.0/16 } }
+  SubnetA: { Type: 'AWS::EC2::Subnet', Properties: { CidrBlock: 10.0.0.0/24, VpcId: !Ref VPC,
+    AvailabilityZone: us-east-1a } }
+  SubnetB: { Type: 'AWS::EC2::Subnet', Properties: { CidrBlock: 10.0.1.0/24,  VpcId: !Ref VPC,
+    AvailabilityZone: us-east-1b } }
+  IGateway: { Type: 'AWS::EC2::InternetGateway' }
+  RouteTable: { Type: 'AWS::EC2::RouteTable', Properties: { VpcId: !Ref VPC } }
+  IGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties: { VpcId: !Ref VPC, InternetGatewayId: !Ref IGateway }
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties: { RouteTableId: !Ref RouteTable, SubnetId: !Ref SubnetA }
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: [IGatewayAttachment]
+    Properties: { DestinationCidrBlock: 0.0.0.0/0,
+      RouteTableId: !Ref RouteTable, GatewayId: !Ref IGateway }
+
+  ApplicationLoadBalancerSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties: { GroupDescription: ApplicationLoadBalancerSG, VpcId: !Ref VPC,
+      SecurityGroupIngress: [{ IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }] }
+  WebServerSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties: { GroupDescription: WebServerSG, VpcId: !Ref VPC,
+      SecurityGroupIngress: [{ IpProtocol: tcp, FromPort: 80, ToPort: 80,
+        SourceSecurityGroupId: !Ref ApplicationLoadBalancerSG }] }
+  WebServer:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-0d141c54b944c67d7 # AL2 Apache Image
+      SubnetId: !Ref SubnetA
+      InstanceType: t2.micro
+      SecurityGroupIds: [!Ref WebServerSG]
+
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties: { SecurityGroups: [!Ref ApplicationLoadBalancerSG],
+      Subnets: [!Ref SubnetA, !Ref SubnetB] }
+  ApplicationLoadBalancerTG:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties: { Port: 80, Protocol: HTTP, TargetType: instance, VpcId: !Ref VPC,
+      Targets: [{ Id: !Ref WebServer }] }
+  ApplicationLoadBalancerListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions: [{ Type: forward, TargetGroupArn: !Ref ApplicationLoadBalancerTG }]
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-FS-1-2-Res-2020-10
+      Certificates: 
+        - CertificateArn:
+            'arn:aws:acm:us-east-1:XXXXXX:certificate/f2fa34b8-ddd6-4f80-b3bc-92a9a7c18bde'
+            # Here Above Replace With Arn Shown in ACM
+
