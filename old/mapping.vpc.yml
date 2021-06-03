@@ -1,0 +1,54 @@
+# VPC, Subnets, Route Tables & Security Groups
+AWSTemplateFormatVersion: 2010-09-09
+Mappings:
+  BaseMap:
+    VPCName: { Val: VPC }
+    VPCCB: { Val: 10.0.0.0/16 }
+    IGatewayName: { Val: IGateway }
+    RouteTableName: { Val: RouteTable }
+    SubnetName: { Val: Subnet }
+    SubnetCB: { Val: 10.0.0.0/24 }
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !FindInMap [BaseMap, VPCCB, !Ref EnvParam]
+  IGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  IGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGateway
+  Subnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Sub ['${AWS::Region}a']
+      CidrBlock: !FindInMap [BaseMap, SubnetCB, !Ref EnvParam]
+      VpcId: !Ref VPC
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref RouteTable
+      GatewayId: !Ref IGateway
+    DependsOn: [IGatewayAttachment]
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref Subnet
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: WebServerSG
+      SecurityGroupIngress:
+        - IpProtocol: http
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
