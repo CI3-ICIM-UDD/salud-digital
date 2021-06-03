@@ -1,0 +1,71 @@
+# VPC, Subnets, Route Tables & Security Groups
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.0.0.0/16
+  IGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  IGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGateway
+  Subnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      VpcId: !Ref VPC
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref Subnet
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref RouteTable
+      GatewayId: !Ref IGateway
+    DependsOn: [IGatewayAttachment]
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: WebServerSG
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+  WebServerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: WebServerRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: 'sts:AssumeRole'
+  WebServerProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: WebServerProfile
+      Roles: [!Ref WebServerRole]
+  WebServer:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-0d141c54b944c67d7 # AL2 Apache Image
+      SubnetId: !Ref Subnet
+      InstanceType: t2.micro
+      SecurityGroupIds: [!Ref SecurityGroup]
+      IamInstanceProfile: !Ref WebServerProfile
+  ElasticIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      InstanceId: !Ref WebServer
